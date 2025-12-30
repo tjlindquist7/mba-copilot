@@ -395,13 +395,40 @@ def generate_embedding(text: str) -> list[float]:
     return response.data[0].embedding
 
 
-def generate_embeddings_batch(texts: list[str]) -> list[list[float]]:
-    """Generate embeddings for multiple texts in a batch."""
-    client = get_openai()
-    response = client.embeddings.create(
-        model=config.EMBEDDING_MODEL, input=texts, dimensions=config.EMBEDDING_DIMENSIONS
+async def generate_embeddings_batch(texts: list[str]) -> list[list[float]]:
+    """Generate embeddings for multiple texts using parallel individual requests.
+
+    Note: CBS endpoint blocks batch requests via Cloudflare, so we send
+    individual requests in parallel instead.
+
+    TODO: Revert to batch API when CBS IT enables batch embedding requests.
+    Original implementation:
+        client = get_openai()
+        response = client.embeddings.create(
+            model=config.EMBEDDING_MODEL, input=texts, dimensions=config.EMBEDDING_DIMENSIONS
+        )
+        return [d.embedding for d in response.data]
+    """
+    import asyncio
+
+    from openai import AsyncOpenAI
+
+    # Create async client with same config as sync client
+    async_client = AsyncOpenAI(
+        api_key=config.OPENAI_API_KEY,
+        base_url=config.OPENAI_BASE_URL if config.OPENAI_BASE_URL else None,
     )
-    return [d.embedding for d in response.data]
+
+    async def get_single_embedding(text: str) -> list[float]:
+        """Get embedding for a single text."""
+        response = await async_client.embeddings.create(
+            model=config.EMBEDDING_MODEL, input=text, dimensions=config.EMBEDDING_DIMENSIONS
+        )
+        return response.data[0].embedding
+
+    # Run all requests in parallel
+    embeddings = await asyncio.gather(*[get_single_embedding(text) for text in texts])
+    return list(embeddings)
 
 
 # =============================================================================
@@ -678,7 +705,7 @@ async def upload(
 
         # Extract text for embeddings
         chunk_texts = [chunk["text"] for chunk in structured_chunks]
-        embeddings = generate_embeddings_batch(chunk_texts)
+        embeddings = await generate_embeddings_batch(chunk_texts)
 
         document_id = generate_document_id()
         uploaded_at = datetime.now(timezone.utc).isoformat()
