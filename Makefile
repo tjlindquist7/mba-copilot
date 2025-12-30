@@ -141,8 +141,10 @@ update:
 	${POETRY_BIN} update
 
 requirements:
-	@echo -e "${CYAN}*** Exporting requirements.txt${RST}"
-	${POETRY_BIN} export --without-hashes -f requirements.txt -o requirements.txt
+	@echo -e "${CYAN}*** Exporting requirements.txt for Vercel${RST}"
+	${POETRY_BIN} export --without-hashes --without-urls -f requirements.txt -o requirements.txt
+	@echo -e "${CYAN}*** Removing Python version markers for Vercel compatibility${RST}"
+	sed -E 's/ ; .*//' requirements.txt > requirements.tmp && mv requirements.tmp requirements.txt
 
 # =============================================================================
 # Cleanup
