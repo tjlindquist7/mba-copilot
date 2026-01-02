@@ -241,15 +241,17 @@ export default function Home() {
 
           const { upload } = await import('@vercel/blob/client');
 
-          await upload(finalFilename, file, {
+          const blob = await upload(finalFilename, file, {
             access: 'public',
             handleUploadUrl: '/api/upload-blob',
+            clientPayload: JSON.stringify({ originalFilename: finalFilename }),
           });
 
-          console.log('Blob uploaded, processing complete');
+          console.log('Blob uploaded to:', blob.url);
+          console.log('Background processing started. File will appear in document list shortly.');
 
-          // The backend processing happens in the upload callback
-          // We just need to refresh documents
+          // The backend processing happens asynchronously in onUploadCompleted
+          // Return a temporary response and let the user know to wait
           data = {
             success: true,
             document_id: `temp_${Date.now()}`, // Temporary ID, will refresh

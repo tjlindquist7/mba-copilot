@@ -715,6 +715,13 @@ async def upload(
         if not structured_chunks:
             raise HTTPException(status_code=400, detail="No content to process")
 
+        # Check if document with same filename already exists and delete it
+        existing_docs = list_documents()
+        for doc in existing_docs:
+            if doc.get("filename") == display_filename:
+                print(f"Deleting existing document with filename: {display_filename}")
+                delete_document(doc["id"])
+
         # Extract text for embeddings
         chunk_texts = [chunk["text"] for chunk in structured_chunks]
         embeddings = await generate_embeddings_batch(chunk_texts)
@@ -826,6 +833,13 @@ async def upload_from_url(request: dict[str, Any]) -> dict[str, Any]:
         structured_chunks = extract_structured_chunks(fake_file)
         if not structured_chunks:
             raise HTTPException(status_code=400, detail="No content to process")
+
+        # Check if document with same filename already exists and delete it
+        existing_docs = list_documents()
+        for doc in existing_docs:
+            if doc.get("filename") == filename:
+                print(f"Deleting existing document with filename: {filename}")
+                delete_document(doc["id"])
 
         # Extract text for embeddings
         chunk_texts = [chunk["text"] for chunk in structured_chunks]

@@ -15,8 +15,9 @@ export async function POST(request: NextRequest) {
     const jsonResponse = await handleUpload({
       body,
       request,
-      onBeforeGenerateToken: async (pathname) => {
+      onBeforeGenerateToken: async (pathname, clientPayload) => {
         // Validate and return metadata
+        const payload = clientPayload ? JSON.parse(clientPayload) : {};
         return {
           allowedContentTypes: [
             'application/pdf',
@@ -26,8 +27,10 @@ export async function POST(request: NextRequest) {
             'text/markdown',
             'text/csv',
           ],
+          addRandomSuffix: true, // Prevent "blob already exists" errors
           tokenPayload: JSON.stringify({
             pathname,
+            originalFilename: payload.originalFilename || pathname,
           }),
         };
       },
@@ -36,8 +39,10 @@ export async function POST(request: NextRequest) {
 
         // Process the file from blob storage
         try {
-          const { pathname } = JSON.parse(tokenPayload || '{}');
+          const { originalFilename } = JSON.parse(tokenPayload || '{}');
           const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000';
+
+          console.log('[Blob] Processing file:', originalFilename);
 
           const response = await fetch(`${backendUrl}/backend/upload-from-url`, {
             method: 'POST',
@@ -46,13 +51,18 @@ export async function POST(request: NextRequest) {
             },
             body: JSON.stringify({
               url: blob.url,
-              filename: pathname || blob.pathname,
+              filename: originalFilename || blob.pathname,
             }),
           });
 
           if (!response.ok) {
-            console.error('[Blob] Backend processing failed');
+            const errorText = await response.text();
+            console.error('[Blob] Backend processing failed:', response.status, errorText);
+            throw new Error(`Backend processing failed: ${response.status}`);
           }
+
+          const result = await response.json();
+          console.log('[Blob] Backend processing successful:', result);
 
           // Delete blob after processing
           const { del } = await import('@vercel/blob');
@@ -60,6 +70,8 @@ export async function POST(request: NextRequest) {
           console.log('[Blob] Deleted temporary blob:', blob.url);
         } catch (error) {
           console.error('[Blob] Error processing upload:', error);
+          // Note: We can't notify the client directly from here since this is async
+          // The error will appear in Vercel logs
         }
       },
     });
