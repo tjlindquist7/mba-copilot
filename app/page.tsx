@@ -200,6 +200,7 @@ export default function Home() {
 
     // Size threshold for using blob upload (4MB)
     const BLOB_UPLOAD_THRESHOLD = 4 * 1024 * 1024;
+    const blobUploadedFiles: string[] = []; // Track files uploaded via blob
 
     for (const file of validFiles) {
       try {
@@ -250,6 +251,9 @@ export default function Home() {
           console.log('Blob uploaded to:', blob.url);
           console.log('Background processing started. File will appear in document list shortly.');
 
+          // Track this file for polling
+          blobUploadedFiles.push(finalFilename);
+
           // The backend processing happens asynchronously in onUploadCompleted
           // Return a temporary response and let the user know to wait
           data = {
@@ -289,7 +293,41 @@ export default function Home() {
       }
     }
 
-    await fetchDocuments();
+    // If we uploaded files via blob, poll until they appear in the document tree
+    if (blobUploadedFiles.length > 0) {
+      console.log('Waiting for blob-uploaded files to be processed...');
+      setUploadStatus('Processing large files...');
+
+      let pollAttempts = 0;
+      const maxPolls = 30; // Poll for up to 30 seconds
+
+      while (pollAttempts < maxPolls) {
+        await fetchDocuments();
+
+        // Check if all blob-uploaded files are now in the document list
+        const currentDocs = await fetch('/backend/documents').then(r => r.json());
+        const docFilenames = currentDocs.documents?.map((d: any) => d.filename) || [];
+
+        const allFilesProcessed = blobUploadedFiles.every(filename =>
+          docFilenames.includes(filename)
+        );
+
+        if (allFilesProcessed) {
+          console.log('All blob-uploaded files processed successfully');
+          break;
+        }
+
+        // Wait 1 second before next poll
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        pollAttempts++;
+      }
+
+      if (pollAttempts >= maxPolls) {
+        console.warn('Some blob-uploaded files may still be processing');
+      }
+    } else {
+      await fetchDocuments();
+    }
 
     if (failCount === 0) {
       const message = folderName

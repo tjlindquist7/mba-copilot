@@ -49,11 +49,19 @@ export async function POST(request: NextRequest) {
           console.log('[Blob] Processing file:', originalFilename);
           console.log('[Blob] Backend URL:', backendUrl);
 
+          // Build headers - include bypass token if available for deployment protection
+          const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+          };
+
+          // Add Vercel deployment protection bypass token if available
+          if (process.env.VERCEL_AUTOMATION_BYPASS_SECRET) {
+            headers['x-vercel-protection-bypass'] = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+          }
+
           const response = await fetch(`${backendUrl}/backend/upload-from-url`, {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
+            headers,
             body: JSON.stringify({
               url: blob.url,
               filename: originalFilename || blob.pathname,
